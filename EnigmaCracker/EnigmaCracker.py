@@ -1,4 +1,3 @@
-# EnigmaCracker
 import subprocess
 import sys
 import os
@@ -20,6 +19,7 @@ from bip_utils import (
 LOG_FILE_NAME = "enigmacracker.log"
 ENV_FILE_NAME = "EnigmaCracker.env"
 WALLETS_FILE_NAME = "wallets_with_balance.txt"
+USED_MNEMONICS_FILE_NAME = "used_mnemonics.txt"
 
 # Global counter for the number of wallets scanned
 wallets_scanned = 0
@@ -30,6 +30,7 @@ directory = os.path.dirname(os.path.abspath(__file__))
 log_file_path = os.path.join(directory, LOG_FILE_NAME)
 env_file_path = os.path.join(directory, ENV_FILE_NAME)
 wallets_file_path = os.path.join(directory, WALLETS_FILE_NAME)
+used_mnemonics_file_path = os.path.join(directory, USED_MNEMONICS_FILE_NAME)
 
 # Configure logging
 logging.basicConfig(
@@ -177,29 +178,49 @@ def write_to_file(seed, BTC_address, BTC_balance, ETH_address, ETH_balance):
         logging.info(f"Written to file: {log_message}")
 
 
+def load_used_mnemonics():
+    # Load used mnemonics from file
+    if not os.path.exists(used_mnemonics_file_path):
+        return set()
+    with open(used_mnemonics_file_path, "r") as f:
+        return set(f.read().splitlines())
+
+
+def save_used_mnemonic(mnemonic):
+    # Save used mnemonic to file
+    with open(used_mnemonics_file_path, "a") as f:
+        f.write(str(mnemonic) + "\n")
+
+
 def main():
     global wallets_scanned
+    used_mnemonics = load_used_mnemonics()  # Load used mnemonics
     try:
         while True:
-            seed = bip()
+            seed = None
+            while seed is None or seed in used_mnemonics:  # Generate a unique mnemonic
+                seed = bip()
+
+            used_mnemonics.add(seed)  # Add generated mnemonic to used set
+            save_used_mnemonic(seed)  # Save used mnemonic
+
             # BTC
             BTC_address = bip44_BTC_seed_to_address(seed)
             BTC_balance = check_BTC_balance(BTC_address)
 
-            logging.info(f"Seed: {seed}")
+            logging.info(f"Mnemonic: {seed}")  # Log generated mnemonic
+
             logging.info(f"BTC address: {BTC_address}")
             logging.info(f"BTC balance: {BTC_balance} BTC")
             logging.info("")
 
             # ETH
             ETH_address = bip44_ETH_wallet_from_seed(seed)
-            ###!
             etherscan_api_key = os.getenv("ETHERSCAN_API_KEY")
             if not etherscan_api_key:
                 raise ValueError(
                     "The Etherscan API key must be set in the environment variables."
                 )
-            ###!
             ETH_balance = check_ETH_balance(ETH_address, etherscan_api_key)
             logging.info(f"ETH address: {ETH_address}")
             logging.info(f"ETH balance: {ETH_balance} ETH")
